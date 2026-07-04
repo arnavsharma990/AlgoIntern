@@ -1,47 +1,75 @@
-# AIgoIntern
+# React + TypeScript + Vite
 
-An AI-powered internship recommendation system that analyzes a student's resume, skills, education, experience, interests, and preferences to recommend relevant internship opportunities.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## Problem
+Currently, two official plugins are available:
 
-Students often have difficulty finding internships that match their skills and career interests. Manually searching through hundreds of internship listings is time-consuming and inefficient.
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-## Solution
+## React Compiler
 
-The system automatically analyzes student information and internship requirements to generate personalized internship recommendations.
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Key Features
+## Expanding the ESLint configuration
 
-- Student registration and authentication
-- Resume upload and automatic information extraction
-- Student profile generation
-- Skill extraction from resumes
-- Internship database
-- AI-based internship matching
-- Personalized internship recommendations
-- Match score for each recommendation
-- Explanation of why an internship is recommended
-- Skill-gap analysis
-- Internship search and filtering
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-## Planned Technology Stack
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
 
-- Frontend: React
-- Backend: Python
-- Database & Authentication: Supabase
-- AI/NLP: LLM-based information extraction and recommendation
-- Resume Processing: PDF/DOCX text extraction
-- Version Control: Git & GitHub
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
 
-## Project Status
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 
-🚧 Currently under development.
+```
 
-## Future Scope
+You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
 
-- LinkedIn profile integration
-- Real-time internship data
-- Resume improvement suggestions
-- Automated application tracking
-- Email notifications
-- Advanced recommendation models
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+
+```
