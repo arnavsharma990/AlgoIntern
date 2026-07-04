@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   Bookmark,
   BriefcaseBusiness,
@@ -23,6 +23,13 @@ import {
 } from 'lucide-react'
 import { demoApplications, internships } from './data/internships'
 import type { Internship } from './types/internship'
+import { signInStudent, signUpStudent, getFriendlyAuthError } from './lib/auth'
+import { useAuth } from './hooks/useAuth'
+import { DiscoverPage } from './pages/DiscoverPage'
+import { ProfilePage, type ProfileFormData } from './pages/ProfilePage'
+import { profileCompletion } from './lib/profile'
+import { listStudentApplications } from './lib/applications'
+import { ApplicationsPage } from './pages/ApplicationsPage'
 
 const domains = ['All', 'Software', 'Data', 'Design', 'Product', 'Marketing', 'Operations'] as const
 const locations = ['All', 'Remote', 'Bangalore', 'Delhi', 'Mumbai', 'Hyderabad', 'Pune', 'Chennai', 'Noida'] as const
@@ -30,7 +37,208 @@ const workModes = ['All', 'Remote', 'Hybrid', 'On-site'] as const
 const sortOptions = ['Relevance', 'Newest', 'Stipend'] as const
 const headlineLines = ['Find the right internship.', 'Build your career.']
 
+type AuthMode = 'login' | 'signup'
+
+const navigateTo = (path: string) => {
+  window.history.pushState({}, '', path)
+  window.dispatchEvent(new PopStateEvent('popstate'))
+}
+
+function AuthScreen({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mode: AuthMode) => void }) {
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setError(null)
+    setMessage(null)
+
+    if (mode === 'signup' && !fullName.trim()) {
+      setError('Please enter your full name.')
+      return
+    }
+    if (!email.trim() || !/^\S+@\S+\.\S+$/.test(email)) {
+      setError('Please enter a valid email address.')
+      return
+    }
+    if (password.length < 8) {
+      setError('Your password must be at least 8 characters.')
+      return
+    }
+    if (mode === 'signup' && password !== confirmPassword) {
+      setError('Your passwords do not match.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      if (mode === 'signup') {
+        const result = await signUpStudent(fullName.trim(), email.trim(), password)
+        if (result.needsEmailConfirmation) {
+          setMessage('Account created. Please check your email to verify your account.')
+        } else {
+          navigateTo('/dashboard')
+        }
+      } else {
+        await signInStudent(email.trim(), password)
+        navigateTo('/dashboard')
+      }
+    } catch (requestError) {
+      setError(getFriendlyAuthError(requestError))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="auth-page">
+      <div className="auth-shell">
+        <div className="auth-brand-row">
+          <a href="/" className="brand" onClick={(event) => { event.preventDefault(); navigateTo('/') }}>
+            <span className="brand-mark">A</span>
+            <span className="brand-text">AlgoIntern</span>
+          </a>
+          <span className="auth-note">Student workspace</span>
+        </div>
+        <div className="auth-card">
+          <div className="section-kicker">{mode === 'login' ? 'Welcome back' : 'Start your journey'}</div>
+          <h1>{mode === 'login' ? 'Sign in to AlgoIntern' : 'Create your student account'}</h1>
+          <p className="auth-subtitle">
+            {mode === 'login' ? 'Pick up where you left off with your internship pipeline.' : 'Keep every opportunity and application in one focused workspace.'}
+          </p>
+
+          <form className="auth-form" onSubmit={submit} noValidate>
+            {mode === 'signup' && (
+              <label>
+                Full name
+                <input value={fullName} onChange={(event) => setFullName(event.target.value)} autoComplete="name" placeholder="Your full name" />
+              </label>
+            )}
+            <label>
+              Email
+              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="you@example.com" />
+            </label>
+            <label>
+              Password
+              <span className="password-field">
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="At least 8 characters" />
+                <button type="button" className="password-toggle" onClick={() => setShowPassword((visible) => !visible)}>
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </span>
+            </label>
+            {mode === 'signup' && (
+              <label>
+                Confirm password
+                <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" placeholder="Repeat your password" />
+              </label>
+            )}
+
+            {error && <p className="form-feedback error-feedback" role="alert">{error}</p>}
+            {message && <p className="form-feedback success-feedback" role="status">{message}</p>}
+            <button className="primary-button auth-submit" type="submit" disabled={submitting}>
+              {submitting ? 'Working...' : mode === 'login' ? 'Sign in' : 'Create account'}
+            </button>
+          </form>
+
+          <p className="auth-switch">
+            {mode === 'login' ? 'New to AlgoIntern?' : 'Already have an account?'}{' '}
+            <button type="button" onClick={() => onModeChange(mode === 'login' ? 'signup' : 'login')}>
+              {mode === 'login' ? 'Create an account' : 'Sign in'}
+            </button>
+          </p>
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function Dashboard({ profile, onSignOut, onNavigate }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']>; onSignOut: () => Promise<void>; onNavigate: (path: string) => void }) {
+  const [signingOut, setSigningOut] = useState(false)
+  const [applicationSummary, setApplicationSummary] = useState({ total: 0, active: 0 })
+  const displayName = profile.full_name?.split(' ')[0] || 'Student'
+  const completion = profileCompletion(profile)
+
+  useEffect(() => {
+    let mounted = true
+    void listStudentApplications(profile.id).then((applications) => {
+      if (!mounted) return
+      setApplicationSummary({ total: applications.length, active: applications.filter((item) => !['selected', 'rejected', 'withdrawn'].includes(item.status)).length })
+    }).catch(() => undefined)
+    return () => { mounted = false }
+  }, [profile.id])
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    try {
+      await onSignOut()
+      navigateTo('/')
+    } finally {
+      setSigningOut(false)
+    }
+  }
+
+  return (
+    <div className="dashboard-page">
+      <header className="topbar scrolled">
+        <nav className="nav container" aria-label="Student navigation">
+          <a href="/" className="brand" onClick={(event) => { event.preventDefault(); navigateTo('/') }}>
+            <span className="brand-mark">A</span>
+            <span className="brand-text">AlgoIntern</span>
+          </a>
+          <div className="nav-actions">
+            <span className="dashboard-user">{profile.full_name || profile.email}</span>
+            <button className="ghost-button desktop-only" type="button" onClick={() => onNavigate('/discover')}>Discover</button>
+            <button className="ghost-button desktop-only" type="button" onClick={() => onNavigate('/applications')}>Applications</button>
+            <button className="ghost-button desktop-only" type="button" onClick={() => onNavigate('/profile')}>Profile</button>
+            <button className="ghost-button" type="button" onClick={handleSignOut} disabled={signingOut}>
+              {signingOut ? 'Signing out...' : 'Log out'}
+            </button>
+          </div>
+        </nav>
+      </header>
+      <main className="dashboard-main container">
+        <div className="section-kicker">Student workspace</div>
+        <h1>Good to see you, {displayName}.</h1>
+        <p className="dashboard-lead">Your authenticated workspace is ready. This is the foundation for your profile, saved internships, and application pipeline.</p>
+        <div className="dashboard-grid">
+          <div className="dashboard-card">
+            <span className="card-label">Profile</span>
+            <h2>{profile.full_name || 'Complete your profile'}</h2>
+            <p>{profile.email || 'Your email is connected to this workspace.'}</p>
+            <div className="dashboard-progress"><span style={{ width: `${completion}%` }} /></div>
+            <span className="dashboard-status">{completion === 100 ? 'Profile complete' : `${completion}% complete`}</span>
+            <button className="secondary-button" type="button" onClick={() => onNavigate('/profile')}>{completion === 100 ? 'Edit profile' : 'Complete profile'}</button>
+          </div>
+          <div className="dashboard-card">
+            <span className="card-label">Workspace</span>
+            <h2>Move with intention.</h2>
+            <p>Discover internships, keep your profile current, and prepare for the next stage of your search.</p>
+            <button className="secondary-button" type="button" onClick={() => onNavigate('/discover')}>Open explorer <ChevronRight size={15} /></button>
+          </div>
+          <div className="dashboard-card dashboard-application-card">
+            <span className="card-label">Applications</span>
+            <h2>{applicationSummary.total} tracked</h2>
+            <p>{applicationSummary.active} active applications need your attention.</p>
+            <button className="secondary-button" type="button" onClick={() => onNavigate('/applications')}>View applications <ChevronRight size={15} /></button>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
 function App() {
+  const { user, profile, loading: authLoading, signOut, updateProfile } = useAuth()
+  const [currentPath, setCurrentPath] = useState(window.location.pathname)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedDomain, setSelectedDomain] = useState<(typeof domains)[number]>('All')
@@ -42,6 +250,17 @@ function App() {
   const [selectedApplicationStatus, setSelectedApplicationStatus] = useState('All')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [headlineReady, setHeadlineReady] = useState(false)
+
+  useEffect(() => {
+    const onPopState = () => setCurrentPath(window.location.pathname)
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  useEffect(() => {
+    const protectedPath = currentPath === '/dashboard' || currentPath === '/profile' || currentPath === '/discover' || currentPath === '/applications'
+    if (!authLoading && !user && protectedPath) navigateTo('/login')
+  }, [authLoading, currentPath, user])
 
   useEffect(() => {
     const revealTimer = window.setTimeout(() => setHeadlineReady(true), 150)
@@ -57,6 +276,8 @@ function App() {
 
   useEffect(() => {
     const revealElements = document.querySelectorAll('.reveal-on-scroll')
+
+    if (revealElements[0]) revealElements[0].classList.add('is-visible')
 
     if (!('IntersectionObserver' in window)) {
       revealElements.forEach((element) => element.classList.add('is-visible'))
@@ -78,7 +299,7 @@ function App() {
     revealElements.forEach((element) => observer.observe(element))
 
     return () => observer.disconnect()
-  }, [])
+  }, [authLoading, currentPath])
 
   useEffect(() => {
     if (!selectedInternship) return
@@ -142,6 +363,65 @@ function App() {
       ? demoApplications
       : demoApplications.filter((item) => item.status === selectedApplicationStatus)
 
+  const handlePublicSignOut = async () => {
+    setLoggingOut(true)
+    try {
+      await signOut()
+    } finally {
+      setLoggingOut(false)
+    }
+  }
+
+  const saveProfile = async (data: ProfileFormData) => {
+    setSavingProfile(true)
+    try {
+      await updateProfile({
+        full_name: data.full_name.trim(),
+        phone: data.phone.trim() || null,
+        headline: data.headline.trim() || null,
+        location: data.location.trim() || null,
+        college: data.college.trim() || null,
+        degree: data.degree.trim() || null,
+        branch: data.branch.trim() || null,
+        graduation_year: data.graduation_year ? Number(data.graduation_year) : null,
+        cgpa: data.cgpa ? Number(data.cgpa) : null,
+        bio: data.bio.trim() || null,
+        skills: data.skills,
+        interests: data.interests,
+        preferred_domains: data.preferred_domains,
+        preferred_locations: data.preferred_locations,
+        preferred_work_modes: data.preferred_work_modes,
+      })
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  if (authLoading) {
+    return <main className="auth-loading">Loading your workspace...</main>
+  }
+
+  if (currentPath === '/dashboard') {
+    return user && profile
+      ? <Dashboard profile={profile} onSignOut={signOut} onNavigate={navigateTo} />
+      : <AuthScreen mode="login" onModeChange={(mode) => navigateTo(`/${mode}`)} />
+  }
+
+  if (currentPath === '/profile' || currentPath === '/discover' || currentPath === '/applications') {
+    if (!user || !profile) return <AuthScreen mode="login" onModeChange={(mode) => navigateTo(`/${mode}`)} />
+    if (currentPath === '/discover') return <DiscoverPage studentId={user.id} onBack={() => navigateTo('/dashboard')} />
+    if (currentPath === '/applications') return <ApplicationsPage studentId={user.id} onBack={() => navigateTo('/dashboard')} />
+    return <ProfilePage profile={profile} email={user.email ?? profile.email ?? ''} saving={savingProfile} onSave={saveProfile} onBack={() => navigateTo('/dashboard')} />
+  }
+
+  if (currentPath === '/login' || currentPath === '/signup') {
+    if (user && profile) {
+      navigateTo('/dashboard')
+      return null
+    }
+    return <AuthScreen mode={currentPath === '/signup' ? 'signup' : 'login'} onModeChange={(mode) => navigateTo(`/${mode}`)} />
+  }
+
   return (
     <div className="page-shell">
       <header className={`topbar ${isScrolled ? 'scrolled' : ''}`}>
@@ -158,12 +438,26 @@ function App() {
           </div>
 
           <div className="nav-actions desktop-only">
-            <button className="ghost-button" type="button">
-              Sign in
-            </button>
-            <button className="primary-button" type="button">
-              Get started
-            </button>
+            {user ? (
+              <>
+                <button className="ghost-button" type="button" onClick={() => navigateTo('/dashboard')}>Dashboard</button>
+                <button className="ghost-button" type="button" onClick={() => navigateTo('/discover')}>Discover</button>
+                <button className="ghost-button" type="button" onClick={() => navigateTo('/applications')}>Applications</button>
+                <button className="ghost-button" type="button" onClick={() => navigateTo('/profile')}>Profile</button>
+                <button className="primary-button" type="button" onClick={handlePublicSignOut} disabled={loggingOut}>
+                  {loggingOut ? 'Signing out...' : 'Log out'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="ghost-button" type="button" onClick={() => navigateTo('/login')}>
+                  Sign in
+                </button>
+                <button className="primary-button" type="button" onClick={() => navigateTo('/signup')}>
+                  Get started
+                </button>
+              </>
+            )}
           </div>
 
           <button
@@ -181,8 +475,20 @@ function App() {
             <a href="#discover" onClick={() => setMobileMenuOpen(false)}>Discover</a>
             <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)}>How it works</a>
             <a href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
-            <button type="button" className="ghost-button full-width">Sign in</button>
-            <button type="button" className="primary-button full-width">Get started</button>
+            {user ? (
+              <>
+                <button type="button" className="ghost-button full-width" onClick={() => { setMobileMenuOpen(false); navigateTo('/dashboard') }}>Dashboard</button>
+                <button type="button" className="ghost-button full-width" onClick={() => { setMobileMenuOpen(false); navigateTo('/discover') }}>Discover</button>
+                <button type="button" className="ghost-button full-width" onClick={() => { setMobileMenuOpen(false); navigateTo('/applications') }}>Applications</button>
+                <button type="button" className="ghost-button full-width" onClick={() => { setMobileMenuOpen(false); navigateTo('/profile') }}>Profile</button>
+                <button type="button" className="primary-button full-width" onClick={handlePublicSignOut} disabled={loggingOut}>{loggingOut ? 'Signing out...' : 'Log out'}</button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="ghost-button full-width" onClick={() => { setMobileMenuOpen(false); navigateTo('/login') }}>Sign in</button>
+                <button type="button" className="primary-button full-width" onClick={() => { setMobileMenuOpen(false); navigateTo('/signup') }}>Get started</button>
+              </>
+            )}
           </div>
         )}
       </header>
@@ -613,7 +919,7 @@ function App() {
             </div>
             <div className="cta-actions">
               <a href="#discover" className="primary-button action-button">Explore internships</a>
-              <button type="button" className="secondary-button action-button">Get started</button>
+              <button type="button" className="secondary-button action-button" onClick={() => navigateTo('/signup')}>Get started</button>
             </div>
           </div>
         </section>
