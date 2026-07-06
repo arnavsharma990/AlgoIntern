@@ -313,6 +313,8 @@ select:focus-visible {
   animation: none;
   width: auto;
   max-width: none;
+  white-space: normal;
+  overflow: visible;
   opacity: 1;
   transform: none;
 }
@@ -1432,6 +1434,8 @@ select:focus-visible {
   }
   .headline-line {
     width: auto;
+    white-space: normal;
+    overflow: visible;
     opacity: 1;
     transform: none;
     animation: none;

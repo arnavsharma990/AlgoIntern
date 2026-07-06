@@ -580,7 +580,7 @@ function App() {
           </div>
         </section>
 
-        <section id="discover" className="discovery-section container reveal-on-scroll">
+        <section id="discover" className="discovery-section container">
           <div className="section-heading">
             <div className="section-kicker">Internship discovery, reimagined</div>
             <h2>Stop searching. Start matching.</h2>
