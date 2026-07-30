@@ -4,6 +4,7 @@ import {
   BriefcaseBusiness,
   Building2,
   CalendarDays,
+  Check,
   ChevronRight,
   Clock3,
   Database,
@@ -26,9 +27,10 @@ import type { Internship } from './types/internship'
 import { signInStudent, signUpStudent, getFriendlyAuthError } from './lib/auth'
 import { useAuth } from './hooks/useAuth'
 import { DiscoverPage } from './pages/DiscoverPage'
+import { Logo } from './components/Logo'
 import { ProfilePage, type ProfileFormData } from './pages/ProfilePage'
 import { profileCompletion } from './lib/profile'
-import { listStudentApplications } from './lib/applications'
+import { listStudentApplications, type StudentApplication } from './lib/applications'
 import { ApplicationsPage } from './pages/ApplicationsPage'
 
 const domains = ['All', 'Software', 'Data', 'Design', 'Product', 'Marketing', 'Operations'] as const
@@ -101,7 +103,7 @@ function AuthScreen({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mod
       <div className="auth-shell">
         <div className="auth-brand-row">
           <a href="/" className="brand" onClick={(event) => { event.preventDefault(); navigateTo('/') }}>
-            <span className="brand-mark">A</span>
+            <span className="brand-mark"><Logo /></span>
             <span className="brand-text">AlgoIntern</span>
           </a>
           <span className="auth-note">Student workspace</span>
@@ -161,15 +163,17 @@ function AuthScreen({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mod
 
 function Dashboard({ profile, onSignOut, onNavigate }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']>; onSignOut: () => Promise<void>; onNavigate: (path: string) => void }) {
   const [signingOut, setSigningOut] = useState(false)
+  const [applications, setApplications] = useState<StudentApplication[]>([])
   const [applicationSummary, setApplicationSummary] = useState({ total: 0, active: 0 })
   const displayName = profile.full_name?.split(' ')[0] || 'Student'
   const completion = profileCompletion(profile)
 
   useEffect(() => {
     let mounted = true
-    void listStudentApplications(profile.id).then((applications) => {
+    void listStudentApplications(profile.id).then((items) => {
       if (!mounted) return
-      setApplicationSummary({ total: applications.length, active: applications.filter((item) => !['selected', 'rejected', 'withdrawn'].includes(item.status)).length })
+      setApplications(items)
+      setApplicationSummary({ total: items.length, active: items.filter((item) => !['selected', 'rejected', 'withdrawn'].includes(item.status)).length })
     }).catch(() => undefined)
     return () => { mounted = false }
   }, [profile.id])
@@ -184,12 +188,21 @@ function Dashboard({ profile, onSignOut, onNavigate }: { profile: NonNullable<Re
     }
   }
 
+  const journeySteps = [
+    { title: 'Profile', hint: 'Complete your profile', done: completion === 100, path: '/profile' },
+    { title: 'Discover', hint: 'Save or track a role', done: applications.length > 0, path: '/discover' },
+    { title: 'Apply', hint: 'Submit an application', done: applications.some((item) => item.status !== 'saved'), path: '/discover' },
+    { title: 'Interview', hint: 'Reach interview stage', done: applications.some((item) => item.status === 'interview' || item.status === 'selected'), path: '/applications' },
+  ]
+  const journeyDone = journeySteps.filter((step) => step.done).length
+  const journeyNext = journeySteps.find((step) => !step.done)
+
   return (
     <div className="dashboard-page">
       <header className="topbar scrolled">
         <nav className="nav container" aria-label="Student navigation">
           <a href="/" className="brand" onClick={(event) => { event.preventDefault(); navigateTo('/') }}>
-            <span className="brand-mark">A</span>
+            <span className="brand-mark"><Logo /></span>
             <span className="brand-text">AlgoIntern</span>
           </a>
           <div className="nav-actions">
@@ -207,6 +220,32 @@ function Dashboard({ profile, onSignOut, onNavigate }: { profile: NonNullable<Re
         <div className="section-kicker">Student workspace</div>
         <h1>Good to see you, {displayName}.</h1>
         <p className="dashboard-lead">Your authenticated workspace is ready. This is the foundation for your profile, saved internships, and application pipeline.</p>
+        <section className="journey-card" aria-label="Career journey">
+          <div className="journey-head">
+            <span className="card-label">Career Journey</span>
+            <span className="journey-count">{journeyDone} of {journeySteps.length} complete</span>
+          </div>
+          <div className="journey-bar" role="progressbar" aria-valuenow={journeyDone} aria-valuemin={0} aria-valuemax={journeySteps.length} aria-label="Career journey progress">
+            <span style={{ width: `${(journeyDone / journeySteps.length) * 100}%` }} />
+          </div>
+          <ol className="journey-steps">
+            {journeySteps.map((step, index) => (
+              <li key={step.title} className={step.done ? 'journey-step done' : 'journey-step'}>
+                <span className="journey-dot">{step.done ? <Check size={13} /> : index + 1}</span>
+                <div>
+                  <strong>{step.title}</strong>
+                  <span>{step.done ? 'Completed' : step.hint}</span>
+                </div>
+              </li>
+            ))}
+          </ol>
+          {journeyNext && (
+            <div className="journey-foot">
+              <span>Next up: {journeyNext.title} — {journeyNext.hint.toLowerCase()}.</span>
+              <button className="secondary-button journey-cta" type="button" onClick={() => onNavigate(journeyNext.path)}>Continue <ChevronRight size={15} /></button>
+            </div>
+          )}
+        </section>
         <div className="dashboard-grid">
           <div className="dashboard-card">
             <span className="card-label">Profile</span>
@@ -427,7 +466,7 @@ function App() {
       <header className={`topbar ${isScrolled ? 'scrolled' : ''}`}>
         <nav className="nav container" aria-label="Main navigation">
           <a href="#top" className="brand" aria-label="AlgoIntern home">
-            <span className="brand-mark">A</span>
+            <span className="brand-mark"><Logo /></span>
             <span className="brand-text">AlgoIntern</span>
           </a>
 
@@ -929,7 +968,7 @@ function App() {
         <div className="container footer-inner">
           <div className="footer-brand">
             <div className="brand">
-              <span className="brand-mark">A</span>
+              <span className="brand-mark"><Logo /></span>
               <span className="brand-text">AlgoIntern</span>
             </div>
             <p>Internship Management &amp; Discovery Platform</p>
